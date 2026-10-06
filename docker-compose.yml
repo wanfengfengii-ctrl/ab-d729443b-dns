@@ -1,0 +1,32 @@
+name: dns-ixfr-replay
+
+services:
+  api:
+    build: .
+    image: dns-ixfr-replay:latest
+    environment:
+      PORT: 8080
+    ports:
+      # Host port is configurable: HOST_PORT=9000 docker compose up api
+      - "${HOST_PORT:-8080}:8080"
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import os,urllib.request;urllib.request.urlopen('http://127.0.0.1:'+os.environ.get('PORT','8080')+'/healthz',timeout=3)\" || exit 1"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+      start_period: 5s
+    restart: unless-stopped
+
+  # One-shot verification: runs code tests, build checks and an API smoke
+  # test (including serial wraparound), then exits. Its exit code is the
+  # verdict: 0 = all green, 1 = failure.
+  verify:
+    image: dns-ixfr-replay:latest
+    build: .
+    depends_on:
+      api:
+        condition: service_healthy
+    environment:
+      API_URL: http://api:8080
+    command: ["python", "-m", "dnsreplay.verify"]
+    restart: "no"
